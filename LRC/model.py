@@ -97,7 +97,9 @@ class Cell():
 
 
 def AuxiliaryHeadCIFAR(input, num_classes, aux_name='auxiliary_head'):
-    relu_a = fluid.layers.relu(input)
+    relu_a = fluid.layers.relu(input, inplace=True)
+    #relu_a.persistable = True
+    #print(relu_a)
     pool_a = fluid.layers.pool2d(relu_a, 5, 'avg', 3)
     conv2d_a = fluid.layers.conv2d(
         pool_a,
@@ -141,6 +143,8 @@ def AuxiliaryHeadCIFAR(input, num_classes, aux_name='auxiliary_head'):
             initializer=Constant(0.), name=bn_b_name + '.bias'),
         moving_mean_name=bn_b_name + '.running_mean',
         moving_variance_name=bn_b_name + '.running_var')
+    #bn_b.persistable = True
+    #print(bn_b)
     fc_name = aux_name + '.classifier'
     fc = fluid.layers.fc(bn_b,
                          num_classes,
@@ -174,11 +178,12 @@ def StemConv(input, C_out, kernel_size, padding):
     return bn_a
 
 
+
 class NetworkCIFAR(object):
     def __init__(self, C, class_num, layers, auxiliary, genotype):
-        self.class_num = class_num
         self._layers = layers
         self._auxiliary = auxiliary
+        self.class_num = class_num
 
         stem_multiplier = 3
         self.drop_path_prob = 0
@@ -201,36 +206,12 @@ class NetworkCIFAR(object):
             if i == 2 * layers // 3:
                 C_to_auxiliary = C_prev
 
-    def forward(self, init_channel, is_train):
-        self.training = is_train
-        self.logits_aux = None
-        num_channel = init_channel * 3
-        s0 = StemConv(self.image, num_channel, kernel_size=3, padding=1)
-        s1 = s0
-        for i, cell in enumerate(self.cells):
-            name = 'cells.' + str(i) + '.'
-            s0, s1 = s1, cell.forward(s0, s1, self.drop_path_prob, is_train,
-                                      name)
-            if i == int(2 * self._layers // 3):
-                if self._auxiliary and self.training:
-                    self.logits_aux = AuxiliaryHeadCIFAR(s1, self.class_num)
-        out = fluid.layers.adaptive_pool2d(s1, (1, 1), "avg")
-        self.logits = fluid.layers.fc(out,
-                                      size=self.class_num,
-                                      param_attr=ParamAttr(
-                                          initializer=Normal(scale=1e-3),
-                                          name='classifier.weight'),
-                                      bias_attr=ParamAttr(
-                                          initializer=Constant(0.),
-                                          name='classifier.bias'))
-        return self.logits, self.logits_aux
-
-    def build_input(self, image_shape, batch_size, is_train):
+    def build_input(self, image_shape, is_train):
         if is_train:
             py_reader = fluid.layers.py_reader(
                 capacity=64,
                 shapes=[[-1] + image_shape, [-1, 1], [-1, 1], [-1, 1], [-1, 1],
-                        [-1, 1], [-1, batch_size, self.class_num - 1]],
+                        [-1, 1], [50, -1, self.class_num - 1]],
                 lod_levels=[0, 0, 0, 0, 0, 0, 0],
                 dtypes=[
                     "float32", "int64", "int64", "float32", "int32", "int32",
@@ -248,14 +229,52 @@ class NetworkCIFAR(object):
                 name='test_reader')
         return py_reader
 
-    def train_model(self, py_reader, init_channels, aux, aux_w, batch_size,
-                    loss_lambda):
+
+    def forward(self, init_channel, is_train):
+        self.training = is_train
+        self.logits_aux = None
+        num_channel = init_channel * 3
+        s0 = s1 = StemConv(self.image, num_channel, kernel_size=3, padding=1)
+        #s0.persistable = True
+        #print(s0)
+        print(s0)
+        for i, cell in enumerate(self.cells):
+            #s1.persistable = True
+            #print(s1)
+            name = 'cells.' + str(i) + '.'
+            s0, s1 = s1, cell.forward(s0, s1, self.drop_path_prob, is_train,
+                                      name)
+            if i == int(2 * self._layers // 3):
+                if self._auxiliary and self.training:
+                    #s1.persistable = True
+                    #print(s1)
+                    self.logits_aux = AuxiliaryHeadCIFAR(s1, self.class_num)
+                    #self.logits_aux.persistable = True
+                    #print(self.logits_aux)
+        out = fluid.layers.adaptive_pool2d(s1, (1, 1), "avg")
+        #out.persistable = True
+        #print(out)
+        self.logits = fluid.layers.fc(out,
+                                      size=self.class_num,
+                                      param_attr=ParamAttr(
+                                          initializer=Normal(scale=1e-3),
+                                          name='classifier.weight'),
+                                      bias_attr=ParamAttr(
+                                          initializer=Constant(0,),
+                                          name='classifier.bias'))
+        #self.logits.persistable = True
+        #print(self.logits)
+        #print(self.logits_aux)
+        return self.logits, self.logits_aux
+
+    def train_model(self, py_reader, init_channels, aux, aux_w, loss_lambda):
         self.image, self.ya, self.yb, self.lam, self.label_reshape,\
            self.non_label_reshape, self.rad_var = fluid.layers.read_file(py_reader)
         self.logits, self.logits_aux = self.forward(init_channels, True)
         self.mixup_loss = self.mixup_loss(aux, aux_w)
-        self.lrc_loss = self.lrc_loss(batch_size)
-        return self.mixup_loss + loss_lambda * self.lrc_loss
+        #self.lrc_loss = self.lrc_loss()
+        #return self.mixup_loss + loss_lambda * self.lrc_loss
+        return self.mixup_loss
 
     def test_model(self, py_reader, init_channels):
         self.image, self.ya = fluid.layers.read_file(py_reader)
@@ -264,12 +283,13 @@ class NetworkCIFAR(object):
         loss = fluid.layers.cross_entropy(prob, self.ya)
         acc_1 = fluid.layers.accuracy(self.logits, self.ya, k=1)
         acc_5 = fluid.layers.accuracy(self.logits, self.ya, k=5)
-        return loss, acc_1, acc_5
+        return prob, acc_1, acc_5
 
     def mixup_loss(self, auxiliary, auxiliary_weight):
         prob = fluid.layers.softmax(self.logits, use_cudnn=False)
         loss_a = fluid.layers.cross_entropy(prob, self.ya)
         loss_b = fluid.layers.cross_entropy(prob, self.yb)
+
         loss_a_mean = fluid.layers.reduce_mean(loss_a)
         loss_b_mean = fluid.layers.reduce_mean(loss_b)
         loss = self.lam * loss_a_mean + (1 - self.lam) * loss_b_mean
@@ -281,9 +301,10 @@ class NetworkCIFAR(object):
             loss_b_aux_mean = fluid.layers.reduce_mean(loss_b_aux)
             loss_aux = self.lam * loss_a_aux_mean + (1 - self.lam
                                                      ) * loss_b_aux_mean
+            #print(loss_aux)
         return loss + auxiliary_weight * loss_aux
 
-    def lrc_loss(self, batch_size):
+    def lrc_loss(self):
         y_diff_reshape = fluid.layers.reshape(self.logits, shape=(-1, 1))
         label_reshape = fluid.layers.squeeze(self.label_reshape, axes=[1])
         non_label_reshape = fluid.layers.squeeze(
@@ -296,18 +317,247 @@ class NetworkCIFAR(object):
         y_diff_non_label_reshape = fluid.layers.gather(y_diff_reshape,
                                                        non_label_reshape)
         y_diff_label = fluid.layers.reshape(
-            y_diff_label_reshape, shape=(-1, batch_size, 1))
+            y_diff_label_reshape, shape=(1, -1, 1))
         y_diff_non_label = fluid.layers.reshape(
             y_diff_non_label_reshape,
-            shape=(-1, batch_size, self.class_num - 1))
+            shape=(1, -1, self.class_num - 1))
         y_diff_ = y_diff_non_label - y_diff_label
 
         y_diff_ = fluid.layers.transpose(y_diff_, perm=[1, 2, 0])
         rad_var_trans = fluid.layers.transpose(self.rad_var, perm=[1, 2, 0])
         rad_y_diff_trans = rad_var_trans * y_diff_
         lrc_loss_sum = fluid.layers.reduce_sum(rad_y_diff_trans, dim=[0, 1])
-        lrc_loss_ = fluid.layers.abs(lrc_loss_sum) / (batch_size *
-                                                      (self.class_num - 1))
+        shape_nbc = fluid.layers.shape(rad_y_diff_trans)
+        shape_nb = fluid.layers.slice(shape_nbc, axes=[0], starts=[0], ends=[2])
+        num = fluid.layers.reduce_prod(shape_nb)
+        num.stop_gradient = True
+        lrc_loss_ = fluid.layers.abs(lrc_loss_sum) / num
         lrc_loss_mean = fluid.layers.reduce_mean(lrc_loss_)
 
         return lrc_loss_mean
+
+def AuxiliaryHeadImageNet(input, num_classes, aux_name='auxiliary_head'):
+    relu_a = fluid.layers.relu(input, inplace=True)
+    #relu_a.persistable = True
+    #print(relu_a)
+    pool_a = fluid.layers.pool2d(relu_a, 5, 'avg', pool_stride=2)
+    conv2d_a = fluid.layers.conv2d(
+        pool_a,
+        128,
+        1,
+        name=aux_name + '.features.2',
+        param_attr=ParamAttr(
+            initializer=Xavier(
+                uniform=False, fan_in=0),
+            name=aux_name + '.features.2.weight'),
+        bias_attr=False)
+    bn_a_name = aux_name + '.features.3'
+    bn_a = fluid.layers.batch_norm(
+        conv2d_a,
+        act='relu',
+        name=bn_a_name,
+        param_attr=ParamAttr(
+            initializer=Constant(1.), name=bn_a_name + '.weight'),
+        bias_attr=ParamAttr(
+            initializer=Constant(0.), name=bn_a_name + '.bias'),
+        moving_mean_name=bn_a_name + '.running_mean',
+        moving_variance_name=bn_a_name + '.running_var')
+    conv2d_b = fluid.layers.conv2d(
+        bn_a,
+        768,
+        2,
+        act='relu',
+        name=aux_name + '.features.5',
+        param_attr=ParamAttr(
+            initializer=Xavier(
+                uniform=False, fan_in=0),
+            name=aux_name + '.features.5.weight'),
+        bias_attr=False)
+    #bn_b.persistable = True
+    #print(bn_b)
+    fc_name = aux_name + '.classifier'
+    fc = fluid.layers.fc(conv2d_b,
+                         num_classes,
+                         name=fc_name,
+                         param_attr=ParamAttr(
+                             initializer=Normal(scale=1e-3),
+                             name=fc_name + '.weight'),
+                         bias_attr=ParamAttr(
+                             initializer=Constant(0.), name=fc_name + '.bias'))
+    return fc
+
+
+def Stem0Conv(input, C_out):
+    conv_a = fluid.layers.conv2d(
+        input,
+        C_out // 2,
+        3,
+        stride=2,
+        padding=1,
+        param_attr=ParamAttr(
+            initializer=Xavier(
+                uniform=False, fan_in=0), name='stem0.0.weight'),
+        bias_attr=False)
+    bn_a = fluid.layers.batch_norm(
+        conv_a,
+        param_attr=ParamAttr(
+            initializer=Constant(1.), name='stem0.1.weight'),
+        bias_attr=ParamAttr(
+            initializer=Constant(0.), name='stem0.1.bias'),
+        moving_mean_name='stem0.1.running_mean',
+        moving_variance_name='stem0.1.running_var')
+    relu_a = fluid.layers.relu(bn_a, inplace=True)
+    conv_b = fluid.layers.conv2d(
+        relu_a,
+        C_out,
+        3,
+        padding=1,
+        param_attr=ParamAttr(
+            initializer=Xavier(
+                uniform=False, fan_in=0), name='stem0.3.weight'),
+        bias_attr=False)
+    bn_b = fluid.layers.batch_norm(
+        conv_b,
+        param_attr=ParamAttr(
+            initializer=Constant(1.), name='stem0.4.weight'),
+        bias_attr=ParamAttr(
+            initializer=Constant(0.), name='stem0.4.bias'),
+        moving_mean_name='stem0.4.running_mean',
+        moving_variance_name='stem0.4.running_var')
+
+    return bn_b
+
+def Stem1Conv(input, C_out):
+    relu_a = fluid.layers.relu(input, inplace=True)
+    conv_a = fluid.layers.conv2d(
+        relu_a,
+        C_out,
+        3,
+        stride=2,
+        padding=1,
+        param_attr=ParamAttr(
+            initializer=Xavier(
+                uniform=False, fan_in=0), name='stem1.1.weight'),
+        bias_attr=False)
+    bn_a = fluid.layers.batch_norm(
+        conv_a,
+        param_attr=ParamAttr(
+            initializer=Constant(1.), name='stem1.2.weight'),
+        bias_attr=ParamAttr(
+            initializer=Constant(0.), name='stem1.2.bias'),
+        moving_mean_name='stem1.2.running_mean',
+        moving_variance_name='stem1.2.running_var')
+    return bn_a
+
+class NetworkImageNet(object):
+    def __init__(self, C, class_num, layers, auxiliary, genotype):
+        self.class_num = class_num
+        self._layers = layers
+        self._auxiliary = auxiliary
+
+        self.drop_path_prob = 0
+
+        C_prev_prev, C_prev, C_curr = C, C, C
+        self.cells = []
+        reduction_prev = True
+        for i in range(layers):
+            if i in [layers // 3, 2 * layers // 3]:
+                C_curr *= 2
+                reduction = True
+            else:
+                reduction = False
+            cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction,
+                        reduction_prev)
+            reduction_prev = reduction
+            self.cells += [cell]
+            C_prev_prev, C_prev = C_prev, cell.multiplier * C_curr
+            if i == 2 * layers // 3:
+                C_to_auxiliary = C_prev
+        self.stem0 = functools.partial(Stem0Conv, C_out=C)
+        self.stem1 = functools.partial(Stem1Conv, C_out=C)
+
+    def build_input(self, image_shape, is_train):
+        if is_train:
+            py_reader = fluid.layers.py_reader(
+                capacity=64,
+                shapes=[[-1] + image_shape, [-1, 1]],
+                lod_levels=[0, 0],
+                dtypes=[
+                    "float32", "int64"],
+                use_double_buffer=True,
+                name='train_reader')
+        else:
+            py_reader = fluid.layers.py_reader(
+                capacity=64,
+                shapes=[[-1] + image_shape, [-1, 1]],
+                lod_levels=[0, 0],
+                dtypes=["float32", "int64"],
+                use_double_buffer=True,
+                name='test_reader')
+        return py_reader
+
+
+    def forward(self, init_channel, is_train):
+        self.training = is_train
+        self.logits_aux = None
+        num_channel = init_channel * 3
+        s0 = self.stem0(self.image)
+        s1 = self.stem1(s0)
+        for i, cell in enumerate(self.cells):
+            #s1.persistable = True
+            #print(s1)
+            name = 'cells.' + str(i) + '.'
+            s0, s1 = s1, cell.forward(s0, s1, self.drop_path_prob, is_train,
+                                      name)
+            if i == int(2 * self._layers // 3):
+                if self._auxiliary and self.training:
+                    #s1.persistable = True
+                    #print(s1)
+                    self.logits_aux = AuxiliaryHeadImageNet(s1, self.class_num)
+                    #self.logits_aux.persistable = True
+                    #print(self.logits_aux)
+        out = fluid.layers.pool2d(s1, 7, "avg")
+        #out.persistable = True
+        #print(out)
+        self.logits = fluid.layers.fc(out,
+                                      size=self.class_num,
+                                      param_attr=ParamAttr(
+                                          initializer=Normal(scale=1e-3),
+                                          name='classifier.weight'),
+                                      bias_attr=ParamAttr(
+                                          initializer=Constant(0,),
+                                          name='classifier.bias'))
+        #self.logits.persistable = True
+        #print(self.logits)
+        #print(self.logits_aux)
+        return self.logits, self.logits_aux
+
+    def calc_loss(self, auxiliary, auxiliary_weight):
+        prob = fluid.layers.softmax(self.logits, use_cudnn=False)
+        loss = fluid.layers.cross_entropy(prob, self.label)
+
+        loss_mean = fluid.layers.reduce_mean(loss)
+        #if auxiliary:
+        #    prob_aux = fluid.layers.softmax(self.logits_aux, use_cudnn=False)
+        #    loss_aux = fluid.layers.cross_entropy(prob_aux, self.label)
+        #    loss_aux_mean = fluid.layers.reduce_mean(loss_aux)
+        prob_aux = fluid.layers.softmax(self.logits_aux, use_cudnn=False)
+        loss_aux = fluid.layers.cross_entropy(prob_aux, self.label)
+        loss_aux_mean = fluid.layers.reduce_mean(loss_aux)
+        return loss_mean + auxiliary_weight * loss_aux_mean
+
+    def train_model(self, py_reader, init_channels, aux, aux_w):
+        self.image, self.label = fluid.layers.read_file(py_reader)
+        self.logits, self.logits_aux = self.forward(init_channels, True)
+        self.loss = self.calc_loss(aux, aux_w)
+        return self.loss
+
+    def test_model(self, py_reader, init_channels):
+        self.image, self.label = fluid.layers.read_file(py_reader)
+        self.logits, _ = self.forward(init_channels, False)
+        prob = fluid.layers.softmax(self.logits, use_cudnn=False)
+        loss = fluid.layers.cross_entropy(prob, self.label)
+        acc_1 = fluid.layers.accuracy(self.logits, self.label, k=1)
+        acc_5 = fluid.layers.accuracy(self.logits, self.label, k=5)
+        return prob, acc_1, acc_5
+

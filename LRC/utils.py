@@ -34,6 +34,10 @@ def mixup_data(x, y, batch_size, alpha=1.0):
         lam = 1.
     index = np.random.permutation(batch_size)
 
+    #
+    #lam = 0.5
+    #index = np.arange(batch_size-1, -1, -1)
+    #
     mixed_x = lam * x + (1 - lam) * x[index, :]
     y_a, y_b = y, y[index]
     return mixed_x.astype('float32'), y_a.astype('int64'),\

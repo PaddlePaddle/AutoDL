@@ -22,48 +22,49 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from learning_rate import cosine_decay
+from learning_rate import cosine_with_warmup_decay
 import numpy as np
 import argparse
-from model import NetworkCIFAR as Network
-import reader_cifar as reader
+from model import NetworkImageNet as Network
+import reader_imagenet as reader
 import sys
 import os
 import time
 import logging
 import genotypes
+import paddle
 import paddle.fluid as fluid
 import shutil
 import utils
 import math
 
-parser = argparse.ArgumentParser("cifar")
+parser = argparse.ArgumentParser("imagenet")
 parser.add_argument(
     '--data',
     type=str,
-    default='./dataset/cifar/cifar-10-batches-py/',
+    default='./dataset/imagenet/',
     help='location of the data corpus')
-parser.add_argument('--batch_size', type=int, default=96, help='batch size')
+parser.add_argument('--batch_size', type=int, default=64, help='batch size')
 parser.add_argument(
     '--pretrained_model', type=str, default='/save_models/599', help='pretrained model to load')
-parser.add_argument('--model_id', type=int, help='model id')
+parser.add_argument('--model_id', type=int, default=2, help='model id')
 parser.add_argument(
     '--learning_rate', type=float, default=0.025, help='init learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument(
-    '--weight_decay', type=float, default=3e-4, help='weight decay')
+    '--weight_decay', type=float, default=4e-5, help='weight decay')
 parser.add_argument(
-    '--report_freq', type=float, default=50, help='report frequency')
+    '--report_freq', type=float, default=10, help='report frequency')
 parser.add_argument(
-    '--epochs', type=int, default=600, help='num of training epochs')
+    '--epochs', type=int, default=90, help='num of training epochs')
 parser.add_argument(
-    '--init_channels', type=int, default=36, help='num of init channels')
+    '--init_channels', type=int, default=96, help='num of init channels')
 parser.add_argument(
     '--layers', type=int, default=20, help='total number of layers')
 parser.add_argument(
     '--save_model_path',
     type=str,
-    default='saved_models',
+    default='save_models',
     help='path to save the model')
 parser.add_argument(
     '--auxiliary',
@@ -76,34 +77,24 @@ parser.add_argument(
     default=0.4,
     help='weight for auxiliary loss')
 parser.add_argument(
-    '--cutout', action='store_true', default=False, help='use cutout')
-parser.add_argument(
-    '--cutout_length', type=int, default=16, help='cutout length')
-parser.add_argument(
-    '--drop_path_prob', type=float, default=0.2, help='drop path probability')
+    '--drop_path_prob', type=float, default=0.4, help='drop path probability')
 parser.add_argument(
     '--arch', type=str, default='DARTS', help='which architecture to use')
 parser.add_argument(
     '--grad_clip', type=float, default=5, help='gradient clipping')
 parser.add_argument(
-    '--lr_exp_decay',
-    action='store_true',
-    default=False,
-    help='use exponential_decay learning_rate')
-parser.add_argument('--mix_alpha', type=float, default=0.5, help='mixup alpha')
-parser.add_argument(
-    '--lrc_loss_lambda', default=0, type=float, help='lrc_loss_lambda')
-parser.add_argument(
-    '--loss_type',
-    default=1,
+    '--warmup_epochs',
+    default=5,
     type=float,
-    help='loss_type 0: cross entropy 1: multi margin loss 2: max margin loss')
+    help='warm up to learning rate')
+parser.add_argument('--lr_min', type=float, default=0.0001,
+                    help='minimum learning rate for a single GPU')
 
 args = parser.parse_args()
 
-CIFAR_CLASSES = 10
-dataset_train_size = 50000.
-image_size = 32
+ImageNet_CLASSES = 1000
+dataset_train_size = 1281167
+image_size = 224
 genotypes.DARTS = genotypes.MY_DARTS_list[args.model_id]
 
 def main():
@@ -112,26 +103,26 @@ def main():
     devices_num = len(devices.split(","))
     logging.info("args = %s", args)
     genotype = eval("genotypes.%s" % args.arch)
-    model = Network(args.init_channels, CIFAR_CLASSES, args.layers,
+    model = Network(args.init_channels, ImageNet_CLASSES, args.layers,
                     args.auxiliary, genotype)
     
     steps_one_epoch = math.ceil(dataset_train_size / (devices_num * args.batch_size))
-    train(model, args, image_shape, steps_one_epoch)
+    train(model, args, image_shape, steps_one_epoch, devices_num)
 
 
 def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
-                  steps_one_epoch):
+                  steps_one_epoch, num_gpu):
     out = []
     with fluid.program_guard(main_prog, startup_prog):
         py_reader = model.build_input(im_shape, is_train)
         if is_train:
             with fluid.unique_name.guard():
                 loss = model.train_model(py_reader, args.init_channels,
-                                         args.auxiliary, args.auxiliary_weight,
-                                         args.lrc_loss_lambda)
+                                         args.auxiliary, args.auxiliary_weight)
                 optimizer = fluid.optimizer.Momentum(
-                        learning_rate=cosine_decay(args.learning_rate, \
-                            args.epochs, steps_one_epoch),
+                        learning_rate=cosine_with_warmup_decay(\
+                            args.learning_rate, args.lr_min, steps_one_epoch,\
+                            args.warmup_epochs, args.epochs, num_gpu),
                         regularization=fluid.regularizer.L2Decay(\
                             args.weight_decay),
                         momentum=args.momentum)
@@ -145,7 +136,7 @@ def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
     return out
 
 
-def train(model, args, im_shape, steps_one_epoch):
+def train(model, args, im_shape, steps_one_epoch, num_gpu):
     train_startup_prog = fluid.Program()
     test_startup_prog = fluid.Program()
     train_prog = fluid.Program()
@@ -153,11 +144,11 @@ def train(model, args, im_shape, steps_one_epoch):
 
     train_py_reader, loss_train = build_program(train_prog, train_startup_prog,
                                                 args, True, model, im_shape,
-                                                steps_one_epoch)
+                                                steps_one_epoch, num_gpu)
 
     test_py_reader, prob, acc_1, acc_5 = build_program(
         test_prog, test_startup_prog, args, False, model, im_shape,
-        steps_one_epoch)
+        steps_one_epoch, num_gpu)
 
     test_prog = test_prog.clone(for_test=True)
 
@@ -181,9 +172,12 @@ def train(model, args, im_shape, steps_one_epoch):
         loss_name=loss_train.name,
         exec_strategy=exec_strategy)
     
+    train_batch_size = args.batch_size
+    test_batch_size = 256
+    train_reader = paddle.batch(
+            reader.train(args), batch_size=train_batch_size, drop_last=True)
+    test_reader = paddle.batch(reader.test(args), batch_size=test_batch_size)
 
-    train_reader = reader.train10(args)
-    test_reader = reader.test10(args)
     train_py_reader.decorate_paddle_reader(train_reader)
     test_py_reader.decorate_paddle_reader(test_reader)
 
@@ -248,6 +242,7 @@ def train(model, args, im_shape, steps_one_epoch):
                         np.array(loss_v).mean(), start_time-prev_start_time))
                 step_id += 1
                 sys.stdout.flush()
+                os._exit(1)
         except fluid.core.EOFException:
             train_py_reader.reset()
         if epoch_id % 50 == 0 or epoch_id == args.epochs - 1:
