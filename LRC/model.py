@@ -93,7 +93,8 @@ class Cell():
                         dropout_implementation='upscale_in_train')
             s = h3 + h4
             out += [s]
-        return fluid.layers.concat([out[i] for i in self._concat], axis=1)
+        concat_ = fluid.layers.concat([out[i] for i in self._concat], axis=1, name=name+'concat')
+        return concat_
 
 
 def AuxiliaryHeadCIFAR(input, num_classes, aux_name='auxiliary_head'):
@@ -337,7 +338,7 @@ class NetworkCIFAR(object):
         return lrc_loss_mean
 
 def AuxiliaryHeadImageNet(input, num_classes, aux_name='auxiliary_head'):
-    relu_a = fluid.layers.relu(input, inplace=True)
+    relu_a = fluid.layers.relu(input, inplace=False)
     #relu_a.persistable = True
     #print(relu_a)
     pool_a = fluid.layers.pool2d(relu_a, 5, 'avg', pool_stride=2)
@@ -405,10 +406,11 @@ def Stem0Conv(input, C_out):
         bias_attr=ParamAttr(
             initializer=Constant(0.), name='stem0.1.bias'),
         moving_mean_name='stem0.1.running_mean',
-        moving_variance_name='stem0.1.running_var')
-    relu_a = fluid.layers.relu(bn_a, inplace=True)
+        moving_variance_name='stem0.1.running_var',
+        act='relu')
+    #relu_a = fluid.layers.relu(bn_a,inplace=True)
     conv_b = fluid.layers.conv2d(
-        relu_a,
+        bn_a,
         C_out,
         3,
         padding=1,
@@ -428,7 +430,7 @@ def Stem0Conv(input, C_out):
     return bn_b
 
 def Stem1Conv(input, C_out):
-    relu_a = fluid.layers.relu(input, inplace=True)
+    relu_a = fluid.layers.relu(input,inplace=False)
     conv_a = fluid.layers.conv2d(
         relu_a,
         C_out,

@@ -140,7 +140,7 @@ def train(args):
     :rtype: callable
     """
 
-    return reader_creator_filepath(args.data, 'train.txt', True)
+    return reader_creator_filepath(args.data, 'debug.txt', True)
 
 
 def test(args):

@@ -163,14 +163,19 @@ def train(model, args, im_shape, steps_one_epoch, num_gpu):
     #        return os.path.exists(os.path.join(args.pretrained_model, var.name))
 
     #    fluid.io.load_vars(exe, args.pretrained_model, main_program=train_prog, predicate=if_exist)
-
+    #build_strategy = fluid.BuildStrategy()
+    #build_strategy.enable_inplace = False
+    #build_strategy.memory_optimize = False
+    train_fetch_list = [loss_train]
+  
+    fluid.memory_optimize(train_prog, skip_opt_set=set(train_fetch_list))
     exec_strategy = fluid.ExecutionStrategy()
-    exec_strategy.num_threads = 1
+    #exec_strategy.num_threads = 1
     train_exe = fluid.ParallelExecutor(
-        main_program=train_prog,
-        use_cuda=True,
-        loss_name=loss_train.name,
-        exec_strategy=exec_strategy)
+         main_program=train_prog,
+         use_cuda=True,
+         loss_name=loss_train.name,
+         exec_strategy=exec_strategy)
     
     train_batch_size = args.batch_size
     test_batch_size = 256
@@ -182,8 +187,7 @@ def train(model, args, im_shape, steps_one_epoch, num_gpu):
     test_py_reader.decorate_paddle_reader(test_reader)
 
     fluid.clip.set_gradient_clip(fluid.clip.GradientClipByGlobalNorm(args.grad_clip), program=train_prog)
-    train_fetch_list = [loss_train]
-    fluid.memory_optimize(train_prog, skip_opt_set=set(train_fetch_list))
+    print(train_prog.to_string(True))
 
     def save_model(postfix, main_prog):
         model_path = os.path.join(args.save_model_path, postfix)
