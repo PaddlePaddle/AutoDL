@@ -121,7 +121,7 @@ class AutoDL(object):
                     --early_stop=20 --data_path=./cifar/pickle-cifar-10
         """
         tokens, adjvec = utils.load_action(mid, self.log_dir)
-        cmd = ("CUDA_VISIBLE_DEVICES=2 python -u inception_train/train.py \
+        cmd = ("CUDA_VISIBLE_DEVICES=1 python -u inception_train/train.py \
                --mid=%d --early_stop=%d --logdir=%s --data_path=%s --chunk_size=%d") % \
               (mid, self.early_stop, self.log_dir, self.data_path, self.chunk_size)
         print("cmd:{}".format(cmd))
