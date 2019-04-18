@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- encoding:utf-8 -*-
+# -*- coding:utf-8 -*-
 # Copyright (c) 2019 PaddlePaddle Authors. All Rights Reserve.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
