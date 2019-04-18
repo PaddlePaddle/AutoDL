@@ -60,6 +60,8 @@ mid=460, average rewards=17.000
 	export FLAGS_fast_eager_deletion_mode=1
 	CUDA_VISIBLE_DEVICES=0 python -u main.py
 ```
+__注意:__ 这里训练需要使用两张卡来训练，Agent使用的卡为`CUDA_VISIBLE_DEVICES=0`(设置在启动`main.py`命令中)；Trainer训练使用卡为`CUDA_VISIBLE_DEVICES=1`(设置在[autodl.py](https://github.com/PaddlePaddle/AutoDL/blob/master/AutoDL%20Design/autodl.py#L124)文件中)
+
 预期结果：
 日志中 `average accuracy`逐步增大
 
