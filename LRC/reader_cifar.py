@@ -52,6 +52,7 @@ half_length = 8
 CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
 CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
 
+
 def generate_reshape_label(label, batch_size, CIFAR_CLASSES=10):
     reshape_label = np.zeros((batch_size, 1), dtype='int32')
     reshape_non_label = np.zeros(
@@ -88,7 +89,7 @@ def preprocess(sample, is_training, args):
     image_array = sample.reshape(3, image_size, image_size)
     rgb_array = np.transpose(image_array, (1, 2, 0))
     img = Image.fromarray(rgb_array, 'RGB')
-    
+
     if is_training:
         # pad and ramdom crop
         img = ImageOps.expand(img, (4, 4, 4, 4), fill=0)  # pad to 40 * 40 * 3
@@ -97,13 +98,13 @@ def preprocess(sample, is_training, args):
                         left_top[1] + image_size))
         if np.random.randint(2):
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
-    
+
     img = np.array(img).astype(np.float32)
 
     # per_image_standardization
     img_float = img / 255.0
     img = (img_float - CIFAR_MEAN) / CIFAR_STD
-   
+
     if is_training and args.cutout:
         center = np.random.randint(image_size, size=2)
         offset_width = max(0, center[0] - half_length)
@@ -114,7 +115,7 @@ def preprocess(sample, is_training, args):
         for i in range(offset_height, target_height):
             for j in range(offset_width, target_width):
                 img[i][j][:] = 0.0
-    
+
     img = np.transpose(img, (2, 0, 1))
     return img
 
@@ -173,8 +174,7 @@ def reader_creator_filepath(filename, sub_name, is_training, args):
                   generate_reshape_label(batch_label, len(batch_data))
                 rad_var = generate_bernoulli_number(len(batch_data))
                 mixed_x, y_a, y_b, lam = utils.mixup_data(
-                    batch_data, batch_label, len(batch_data),
-                    args.mix_alpha)
+                    batch_data, batch_label, len(batch_data), args.mix_alpha)
                 batch_out = [[mixed_x, y_a, y_b, lam, flatten_label, \
                             flatten_non_label, rad_var]]
                 yield batch_out

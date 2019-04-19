@@ -70,6 +70,7 @@ dataset_train_size = 50000.
 image_size = 32
 genotypes.DARTS = genotypes.MY_DARTS_list[args.model_id]
 
+
 def main():
     image_shape = [3, image_size, image_size]
     devices = os.getenv("CUDA_VISIBLE_DEVICES") or ""
@@ -78,8 +79,9 @@ def main():
     genotype = eval("genotypes.%s" % args.arch)
     model = Network(args.init_channels, CIFAR_CLASSES, args.layers,
                     args.auxiliary, genotype)
-    
-    steps_one_epoch = math.ceil(dataset_train_size / (devices_num * args.batch_size))
+
+    steps_one_epoch = math.ceil(dataset_train_size /
+                                (devices_num * args.batch_size))
     train(model, args, image_shape, steps_one_epoch)
 
 
@@ -94,11 +96,10 @@ def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
                                          args.auxiliary, args.auxiliary_weight,
                                          args.lrc_loss_lambda)
                 optimizer = fluid.optimizer.Momentum(
-                        learning_rate=cosine_decay(args.learning_rate, 
-                            args.epochs, steps_one_epoch),
-                        regularization=fluid.regularizer.L2Decay(
-                            args.weight_decay),
-                        momentum=args.momentum)
+                    learning_rate=cosine_decay(args.learning_rate, args.epochs,
+                                               steps_one_epoch),
+                    regularization=fluid.regularizer.L2Decay(args.weight_decay),
+                    momentum=args.momentum)
                 optimizer.minimize(loss)
                 out = [py_reader, loss]
         else:
@@ -114,13 +115,11 @@ def train(model, args, im_shape, steps_one_epoch):
     train_prog = fluid.Program()
     test_prog = fluid.Program()
 
-    train_py_reader, loss_train = build_program(train_prog, startup_prog,
-                                                args, True, model, im_shape,
-                                                steps_one_epoch)
+    train_py_reader, loss_train = build_program(
+        train_prog, startup_prog, args, True, model, im_shape, steps_one_epoch)
 
     test_py_reader, prob, acc_1, acc_5 = build_program(
-        test_prog, startup_prog, args, False, model, im_shape,
-        steps_one_epoch)
+        test_prog, startup_prog, args, False, model, im_shape, steps_one_epoch)
 
     test_prog = test_prog.clone(for_test=True)
 
@@ -131,31 +130,33 @@ def train(model, args, im_shape, steps_one_epoch):
     if args.pretrained_model:
 
         def if_exist(var):
-            return os.path.exists(os.path.join(args.pretrained_model,
-                                var.name))
+            return os.path.exists(os.path.join(args.pretrained_model, var.name))
 
-        fluid.io.load_vars(exe, args.pretrained_model, 
-                            main_program=train_prog, 
-                            predicate=if_exist)
+        fluid.io.load_vars(
+            exe,
+            args.pretrained_model,
+            main_program=train_prog,
+            predicate=if_exist)
 
     exec_strategy = fluid.ExecutionStrategy()
     exec_strategy.num_threads = 1
-    build_strategy = fluid.BuildStrategy()  
+    build_strategy = fluid.BuildStrategy()
     build_strategy.memory_optimize = False
     build_strategy.enable_inplace = True
 
     compile_program = fluid.compiler.CompiledProgram(
-                 train_prog).with_data_parallel(
-                 loss_name=loss_train.name,
-                 build_strategy=build_strategy,
-                 exec_strategy=exec_strategy)
+        train_prog).with_data_parallel(
+            loss_name=loss_train.name,
+            build_strategy=build_strategy,
+            exec_strategy=exec_strategy)
 
     train_reader = reader.train10(args)
     test_reader = reader.test10(args)
     train_py_reader.decorate_paddle_reader(train_reader)
     test_py_reader.decorate_paddle_reader(test_reader)
 
-    fluid.clip.set_gradient_clip(fluid.clip.GradientClipByGlobalNorm(args.grad_clip), program=train_prog)
+    fluid.clip.set_gradient_clip(
+        fluid.clip.GradientClipByGlobalNorm(args.grad_clip), program=train_prog)
     train_fetch_list = [loss_train]
 
     def save_model(postfix, main_prog):
@@ -175,8 +176,8 @@ def train(model, args, im_shape, steps_one_epoch):
             while True:
                 prev_test_start_time = test_start_time
                 test_start_time = time.time()
-                prob_v, acc_1_v, acc_5_v = exe.run(
-                    test_prog, fetch_list=test_fetch_list)
+                prob_v, acc_1_v, acc_5_v = exe.run(test_prog,
+                                                   fetch_list=test_fetch_list)
                 top1.update(np.array(acc_1_v), np.array(prob_v).shape[0])
                 top5.update(np.array(acc_5_v), np.array(prob_v).shape[0])
                 if step_id % args.report_freq == 0:
@@ -207,7 +208,8 @@ def train(model, args, im_shape, steps_one_epoch):
             while True:
                 prev_start_time = start_time
                 start_time = time.time()
-                loss_v, = exe.run(compile_program, 
+                loss_v, = exe.run(
+                    compile_program,
                     fetch_list=[v.name for v in train_fetch_list])
                 print("Epoch {}, Step {}, loss {}, time {}".format(epoch_id, step_id, \
                         np.array(loss_v).mean(), start_time-prev_start_time))

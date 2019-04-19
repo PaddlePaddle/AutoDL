@@ -37,49 +37,20 @@ import shutil
 import utils
 
 parser = argparse.ArgumentParser("cifar")
-parser.add_argument(
-    '--data',
-    type=str,
-    default='./dataset/cifar/cifar-10-batches-py/',
-    help='location of the data corpus')
+# yapf: disable
+parser.add_argument('--data', type=str, default='./dataset/cifar/cifar-10-batches-py/', help='location of the data corpus')
 parser.add_argument('--batch_size', type=int, default=96, help='batch size')
 parser.add_argument('--model_id', type=int, help='model id')
-parser.add_argument(
-    '--report_freq', type=float, default=50, help='report frequency')
-parser.add_argument(
-    '--init_channels', type=int, default=36, help='num of init channels')
-parser.add_argument(
-    '--layers', type=int, default=20, help='total number of layers')
-parser.add_argument(
-    '--auxiliary',
-    action='store_true',
-    default=False,
-    help='use auxiliary tower')
-parser.add_argument(
-    '--auxiliary_weight',
-    type=float,
-   default=0.4,
-    help='weight for auxiliary loss')
-parser.add_argument(
-    '--cutout_length', type=int, default=16, help='cutout length')
-parser.add_argument(
-    '--drop_path_prob', type=float, default=0.2, help='drop path probability')
-parser.add_argument(
-    '--pretrained_model', type=str, default='/model_0/final/', help='pretrained model to load')
-parser.add_argument(
-    '--arch', type=str, default='DARTS', help='which architecture to use')
-parser.add_argument(
-    '--lrc_loss_lambda', default=0, type=float, help='lrc_loss_lambda')
-parser.add_argument(
-    '--loss_type',
-    default=1,
-    type=float,
-    help='loss_type 0: cross entropy 1: multi margin loss 2: max margin loss')
-parser.add_argument(
-    '--dump_path',
-    type=str,
-    default='prob_test_0.pkl',
-    help='dump path')
+parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
+parser.add_argument( '--init_channels', type=int, default=36, help='num of init channels')
+parser.add_argument( '--layers', type=int, default=20, help='total number of layers')
+parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
+parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
+parser.add_argument('--drop_path_prob', type=float, default=0.2, help='drop path probability')
+parser.add_argument('--pretrained_model', type=str, default='/model_0/final/', help='pretrained model to load')
+parser.add_argument('--arch', type=str, default='DARTS', help='which architecture to use')
+parser.add_argument('--dump_path', type=str, default='prob_test_0.pkl', help='dump path')
+# yapf: enable
 
 args = parser.parse_args()
 
@@ -88,6 +59,7 @@ dataset_train_size = 50000
 image_size = 32
 genotypes.DARTS = genotypes.MY_DARTS_list[args.model_id]
 print(genotypes.DARTS)
+
 
 def main():
     image_shape = [3, image_size, image_size]
@@ -103,16 +75,15 @@ def main():
 def build_program(args, is_train, model, im_shape):
     out = []
     py_reader = model.build_input(im_shape, is_train)
-    prob, acc_1, acc_5 = model.test_model(py_reader,
-                                       args.init_channels)
+    prob, acc_1, acc_5 = model.test_model(py_reader, args.init_channels)
     out = [py_reader, prob, acc_1, acc_5]
     return out
 
 
 def test(model, args, im_shape):
 
-    test_py_reader, prob, acc_1, acc_5 = build_program(
-         args, False, model, im_shape)
+    test_py_reader, prob, acc_1, acc_5 = build_program(args, False, model,
+                                                       im_shape)
 
     test_prog = fluid.default_main_program().clone(for_test=True)
 
@@ -131,8 +102,7 @@ def test(model, args, im_shape):
     exec_strategy = fluid.ExecutionStrategy()
     exec_strategy.num_threads = 1
     compile_program = fluid.compiler.CompiledProgram(
-            test_prog).with_data_parallel(
-                exec_strategy=exec_strategy)
+        test_prog).with_data_parallel(exec_strategy=exec_strategy)
     test_reader = reader.test10(args)
     test_py_reader.decorate_paddle_reader(test_reader)
 
@@ -148,22 +118,23 @@ def test(model, args, im_shape):
             prev_test_start_time = test_start_time
             test_start_time = time.time()
             prob_v, acc_1_v, acc_5_v = exe.run(compile_program,
-                test_prog, fetch_list=test_fetch_list)
+                                               test_prog,
+                                               fetch_list=test_fetch_list)
             prob.append(list(np.array(prob_v)))
             top1.update(np.array(acc_1_v), np.array(prob_v).shape[0])
             top5.update(np.array(acc_5_v), np.array(prob_v).shape[0])
             if step_id % args.report_freq == 0:
                 print('prob shape:', np.array(prob_v).shape)
-                print("Step {}, acc_1 {}, acc_5 {}, time {}".
-                      format(step_id,
-                             np.array(acc_1_v),
-                             np.array(acc_5_v), test_start_time -
-                             prev_test_start_time))
+                print("Step {}, acc_1 {}, acc_5 {}, time {}".format(
+                    step_id,
+                    np.array(acc_1_v),
+                    np.array(acc_5_v), test_start_time - prev_test_start_time))
             step_id += 1
     except fluid.core.EOFException:
         test_py_reader.reset()
     np.concatenate(prob).dump(args.dump_path)
-    print("top1 {0}, top5 {1}".format(top1.avg,top5.avg))
+    print("top1 {0}, top5 {1}".format(top1.avg, top5.avg))
+
 
 if __name__ == '__main__':
     main()
