@@ -31,7 +31,10 @@ from PIL import Image
 from PIL import ImageOps
 import numpy as np
 
-import cPickle
+try:
+    import cPickle as pickle
+except:
+    import pickle
 import random
 import utils
 import paddle.fluid as fluid
@@ -46,7 +49,7 @@ image_size = 32
 image_depth = 3
 half_length = 8
 
-CIFAR_MEAN = [0.4914, 0.4822, 0.4465]
+CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
 CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
 
 
@@ -82,6 +85,7 @@ def generate_bernoulli_number(batch_size, CIFAR_CLASSES=10):
 
 
 def preprocess(sample, is_training, args):
+
     image_array = sample.reshape(3, image_size, image_size)
     rgb_array = np.transpose(image_array, (1, 2, 0))
     img = Image.fromarray(rgb_array, 'RGB')
@@ -123,13 +127,15 @@ def reader_creator_filepath(filename, sub_name, is_training, args):
     datasets = []
     for name in names:
         print("Reading file " + name)
-        batch = cPickle.load(open(filename + name, 'rb'))
+        batch = pickle.load(open(filename + name, 'rb'))
         data = batch['data']
         labels = batch.get('labels', batch.get('fine_labels', None))
         assert labels is not None
         dataset = zip(data, labels)
         datasets.extend(dataset)
-    random.shuffle(datasets)
+
+    if is_training:
+        random.shuffle(datasets)
 
     def read_batch(datasets, args):
         for sample, label in datasets:
@@ -160,6 +166,23 @@ def reader_creator_filepath(filename, sub_name, is_training, args):
                     yield batch_out
                 batch_data = []
                 batch_label = []
+        if len(batch_data) != 0:
+            batch_data = np.array(batch_data, dtype='float32')
+            batch_label = np.array(batch_label, dtype='int64')
+            if is_training:
+                flatten_label, flatten_non_label = \
+                  generate_reshape_label(batch_label, len(batch_data))
+                rad_var = generate_bernoulli_number(len(batch_data))
+                mixed_x, y_a, y_b, lam = utils.mixup_data(
+                    batch_data, batch_label, len(batch_data), args.mix_alpha)
+                batch_out = [[mixed_x, y_a, y_b, lam, flatten_label, \
+                            flatten_non_label, rad_var]]
+                yield batch_out
+            else:
+                batch_out = [[batch_data, batch_label]]
+                yield batch_out
+            batch_data = []
+            batch_label = []
 
     return reader
 
