@@ -12,6 +12,8 @@ pred = np.zeros((10000, 10))
 fl.sort()
 i = 0
 for f in fl:
+    if 'init' in f:
+        continue
     print(f)
     pred += pickle.load(open(os.path.join(model_path, f)))
     print(np.mean(np.argmax(pred, axis=1) == labels))
