@@ -127,7 +127,10 @@ def reader_creator_filepath(filename, sub_name, is_training, args):
     datasets = []
     for name in names:
         print("Reading file " + name)
-        batch = pickle.load(open(filename + name, 'rb'))
+        try:
+            batch = pickle.load(open(filename + name, 'rb'), encode='latin1')
+        except TypeError:
+            batch = pickle.load(open(filename + name, 'rb'))
         data = batch['data']
         labels = batch.get('labels', batch.get('fine_labels', None))
         assert labels is not None
