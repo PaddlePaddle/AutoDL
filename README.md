@@ -3,8 +3,8 @@
 ## Content
 - [Installation](#Installation)
 - [Introduction](#Introduction)
-- [Data Preparation](#Data Preparation)
-- [Model Training](#Model Training)
+- [Data Preparation](#Data-Preparation)
+- [Model Training](#Model-Training)
 
 ## Installation
 Running demo code in the current directory requires PadddlePaddle Fluid v.1.3.0 or above. If your runtime environment does not meet this requirement, please update PaddlePaddle according to the documents.
