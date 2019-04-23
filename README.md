@@ -29,7 +29,7 @@ python dataset_maker.py
 
 ## Model Training
 In the training process, AutoDLa Design agent generates tokens and adjacency matrices used for training, and the trainer uses these tokens and matrices to construct and train convolutional neural networks. The validation accuracy after 20 epochs are used as feed back for the agent, and the agent updates its policy accordingly. After several iterations, the agent learns to find a quality deep neural network.
-![Picture](./AutoDL Design/img/cnn_net.png)
+![Picture](./AutoDL%20Design/img/cnn_net.png)
 Here we provide the following test on the method.
 
 ### Test on the convergence of the number of tokens produced
@@ -78,6 +78,6 @@ step = 844, average accuracy = 0.808
 ```
 ### Results
 
-![Picture](./AutoDL Design/img/search_result.png)
+![Picture](./AutoDL%20Design/img/search_result.png)
 The x-axis is the number of steps, and the y-axis is validation accuracy of the sampled models. The average performance of the sampled models improves over time.
 
