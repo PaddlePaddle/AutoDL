@@ -226,7 +226,6 @@ class NetworkCIFAR(object):
                 name='test_reader')
         return py_reader
 
-
     def forward(self, init_channel, is_train):
         self.training = is_train
         self.logits_aux = None
@@ -246,7 +245,7 @@ class NetworkCIFAR(object):
                                           initializer=Normal(scale=1e-3),
                                           name='classifier.weight'),
                                       bias_attr=ParamAttr(
-                                          initializer=Constant(0,),
+                                          initializer=Constant(0),
                                           name='classifier.bias'))
         return self.logits, self.logits_aux
 
@@ -255,8 +254,6 @@ class NetworkCIFAR(object):
            self.non_label_reshape, self.rad_var = fluid.layers.read_file(py_reader)
         self.logits, self.logits_aux = self.forward(init_channels, True)
         self.mixup_loss = self.mixup_loss(aux, aux_w)
-        #self.lrc_loss = self.lrc_loss()
-        #return self.mixup_loss + loss_lambda * self.lrc_loss
         return self.mixup_loss
 
     def test_model(self, py_reader, init_channels):
@@ -301,8 +298,7 @@ class NetworkCIFAR(object):
         y_diff_label = fluid.layers.reshape(
             y_diff_label_reshape, shape=(1, -1, 1))
         y_diff_non_label = fluid.layers.reshape(
-            y_diff_non_label_reshape,
-            shape=(1, -1, self.class_num - 1))
+            y_diff_non_label_reshape, shape=(1, -1, self.class_num - 1))
         y_diff_ = y_diff_non_label - y_diff_label
 
         y_diff_ = fluid.layers.transpose(y_diff_, perm=[1, 2, 0])
@@ -317,6 +313,7 @@ class NetworkCIFAR(object):
         lrc_loss_mean = fluid.layers.reduce_mean(lrc_loss_)
 
         return lrc_loss_mean
+
 
 def AuxiliaryHeadImageNet(input, num_classes, aux_name='auxiliary_head'):
     relu_a = fluid.layers.relu(input)
@@ -376,7 +373,7 @@ def Stem0Conv(input, C_out):
             initializer=Xavier(
                 uniform=False, fan_in=0), name='stem0.0.weight'),
         bias_attr=False)
-    bn_a = fluid.layers.batch_norm(
+    relu_a = fluid.layers.batch_norm(
         conv_a,
         param_attr=ParamAttr(
             initializer=Constant(1.), name='stem0.1.weight'),
@@ -385,9 +382,8 @@ def Stem0Conv(input, C_out):
         moving_mean_name='stem0.1.running_mean',
         moving_variance_name='stem0.1.running_var',
         act='relu')
-    #relu_a = fluid.layers.relu(bn_a,inplace=True)
     conv_b = fluid.layers.conv2d(
-        bn_a,
+        relu_a,
         C_out,
         3,
         stride=2,
@@ -406,6 +402,7 @@ def Stem0Conv(input, C_out):
         moving_variance_name='stem0.4.running_var')
 
     return bn_b
+
 
 def Stem1Conv(input, C_out):
     relu_a = fluid.layers.relu(input)
@@ -428,6 +425,7 @@ def Stem1Conv(input, C_out):
         moving_mean_name='stem1.2.running_mean',
         moving_variance_name='stem1.2.running_var')
     return bn_a
+
 
 class NetworkImageNet(object):
     def __init__(self, C, class_num, layers, genotype):
@@ -461,8 +459,7 @@ class NetworkImageNet(object):
                 capacity=64,
                 shapes=[[-1] + image_shape, [-1, 1]],
                 lod_levels=[0, 0],
-                dtypes=[
-                    "float32", "int64"],
+                dtypes=["float32", "int64"],
                 use_double_buffer=True,
                 name='train_reader')
         else:
@@ -474,7 +471,6 @@ class NetworkImageNet(object):
                 use_double_buffer=True,
                 name='test_reader')
         return py_reader
-
 
     def forward(self, is_train):
         self.training = is_train
@@ -495,7 +491,7 @@ class NetworkImageNet(object):
                                           initializer=Normal(scale=1e-3),
                                           name='classifier.weight'),
                                       bias_attr=ParamAttr(
-                                          initializer=Constant(0,),
+                                          initializer=Constant(0),
                                           name='classifier.bias'))
         return self.logits, self.logits_aux
 
@@ -504,10 +500,6 @@ class NetworkImageNet(object):
         loss = fluid.layers.cross_entropy(prob, self.label)
 
         loss_mean = fluid.layers.reduce_mean(loss)
-        #if auxiliary:
-        #    prob_aux = fluid.layers.softmax(self.logits_aux, use_cudnn=False)
-        #    loss_aux = fluid.layers.cross_entropy(prob_aux, self.label)
-        #    loss_aux_mean = fluid.layers.reduce_mean(loss_aux)
         prob_aux = fluid.layers.softmax(self.logits_aux, use_cudnn=False)
         loss_aux = fluid.layers.cross_entropy(prob_aux, self.label)
         loss_aux_mean = fluid.layers.reduce_mean(loss_aux)
@@ -527,4 +519,3 @@ class NetworkImageNet(object):
         acc_1 = fluid.layers.accuracy(self.logits, self.label, k=1)
         acc_5 = fluid.layers.accuracy(self.logits, self.label, k=5)
         return prob, acc_1, acc_5
-

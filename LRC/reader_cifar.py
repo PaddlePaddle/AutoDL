@@ -126,7 +126,10 @@ def reader_creator_filepath(filename, sub_name, is_training, args):
     datasets = []
     for name in names:
         print("Reading file " + name)
-        batch = pickle.load(open(filename + name, 'rb'))
+        try:
+            batch = pickle.load(open(filename + name, 'rb'), encode='latin1')
+        except TypeError:
+            batch = pickle.load(open(filename + name, 'rb'))
         data = batch['data']
         labels = batch.get('labels', batch.get('fine_labels', None))
         assert labels is not None
@@ -177,8 +180,7 @@ def reader_creator_filepath(filename, sub_name, is_training, args):
                   generate_reshape_label(batch_label, len(batch_data))
                 rad_var = generate_bernoulli_number(len(batch_data))
                 mixed_x, y_a, y_b, lam = utils.mixup_data(
-                    batch_data, batch_label, len(batch_data),
-                    args.mix_alpha)
+                    batch_data, batch_label, len(batch_data), args.mix_alpha)
                 batch_out = [[mixed_x, y_a, y_b, lam, flatten_label, \
                             flatten_non_label, rad_var]]
                 yield batch_out

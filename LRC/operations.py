@@ -312,7 +312,8 @@ def FactorizedReduce(input, C_out, name='', affine=True):
         bias_attr=False)
     h_end = relu_a.shape[2]
     w_end = relu_a.shape[3]
-    slice_a = fluid.layers.slice(input=relu_a, axes=[2, 3], starts=[1, 1], ends=[h_end, w_end])
+    slice_a = fluid.layers.slice(
+        input=relu_a, axes=[2, 3], starts=[1, 1], ends=[h_end, w_end])
     conv2d_b = fluid.layers.conv2d(
         slice_a,
         C_out // 2,

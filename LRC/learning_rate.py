@@ -42,12 +42,12 @@ def cosine_decay(learning_rate, num_epoch, steps_one_epoch):
                  * math.pi / num_epoch) + 1)/2
     return decayed_lr
 
-    
-def cosine_with_warmup_decay(learning_rate, lr_min, steps_one_epoch, 
-                                  warmup_epochs, total_epoch, num_gpu):
+
+def cosine_with_warmup_decay(learning_rate, lr_min, steps_one_epoch,
+                             warmup_epochs, total_epoch, num_gpu):
     global_step = _decay_step_counter()
     epoch_idx = fluid.layers.floor(global_step / steps_one_epoch)
-    
+
     lr = fluid.layers.create_global_var(
         shape=[1],
         value=0.0,
@@ -59,16 +59,17 @@ def cosine_with_warmup_decay(learning_rate, lr_min, steps_one_epoch,
         shape=[1], dtype='float32', value=float(warmup_epochs), force_cpu=True)
     num_gpu_var = fluid.layers.fill_constant(
         shape=[1], dtype='float32', value=float(num_gpu), force_cpu=True)
-    batch_idx = global_step - steps_one_epoch * epoch_idx 
+    batch_idx = global_step - steps_one_epoch * epoch_idx
 
     with fluid.layers.control_flow.Switch() as switch:
         with switch.case(epoch_idx < warmup_epoch_var):
             epoch_ = (batch_idx + 1) / steps_one_epoch
-            factor = 1 / num_gpu_var * (epoch_ * (num_gpu_var - 1) / warmup_epoch_var + 1)
+            factor = 1 / num_gpu_var * (
+                epoch_ * (num_gpu_var - 1) / warmup_epoch_var + 1)
             decayed_lr = learning_rate * factor * num_gpu_var
             fluid.layers.assign(decayed_lr, lr)
         epoch_ = (batch_idx + 1) / steps_one_epoch
-        m = epoch_ / total_epoch        
+        m = epoch_ / total_epoch
         frac = (1 + ops.cos(math.pi * m)) / 2
         cosine_lr = (lr_min + (learning_rate - lr_min) * frac) * num_gpu_var
         with switch.default():

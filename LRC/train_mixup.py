@@ -38,66 +38,30 @@ import utils
 import math
 
 parser = argparse.ArgumentParser("cifar")
-parser.add_argument(
-    '--data',
-    type=str,
-    default='./dataset/cifar/cifar-10-batches-py/',
-    help='location of the data corpus')
+# yapf: disable
+parser.add_argument('--data', type=str, default='./dataset/cifar/cifar-10-batches-py/', help='location of the data corpus')
 parser.add_argument('--batch_size', type=int, default=96, help='batch size')
-parser.add_argument(
-    '--pretrained_model', type=str, default='/save_models/599', help='pretrained model to load')
+parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained model to load')
 parser.add_argument('--model_id', type=int, help='model id')
-parser.add_argument(
-    '--learning_rate', type=float, default=0.025, help='init learning rate')
+parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
-parser.add_argument(
-    '--weight_decay', type=float, default=3e-4, help='weight decay')
-parser.add_argument(
-    '--report_freq', type=float, default=50, help='report frequency')
-parser.add_argument(
-    '--epochs', type=int, default=600, help='num of training epochs')
-parser.add_argument(
-    '--init_channels', type=int, default=36, help='num of init channels')
-parser.add_argument(
-    '--layers', type=int, default=20, help='total number of layers')
-parser.add_argument(
-    '--save_model_path',
-    type=str,
-    default='saved_models',
-    help='path to save the model')
-parser.add_argument(
-    '--auxiliary',
-    action='store_true',
-    default=False,
-    help='use auxiliary tower')
-parser.add_argument(
-    '--auxiliary_weight',
-    type=float,
-    default=0.4,
-    help='weight for auxiliary loss')
-parser.add_argument(
-    '--cutout', action='store_true', default=False, help='use cutout')
-parser.add_argument(
-    '--cutout_length', type=int, default=16, help='cutout length')
-parser.add_argument(
-    '--drop_path_prob', type=float, default=0.2, help='drop path probability')
-parser.add_argument(
-    '--arch', type=str, default='DARTS', help='which architecture to use')
-parser.add_argument(
-    '--grad_clip', type=float, default=5, help='gradient clipping')
-parser.add_argument(
-    '--lr_exp_decay',
-    action='store_true',
-    default=False,
-    help='use exponential_decay learning_rate')
+parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay')
+parser.add_argument('--report_freq', type=float, default=50, help='report frequency')
+parser.add_argument('--epochs', type=int, default=600, help='num of training epochs')
+parser.add_argument('--init_channels', type=int, default=36, help='num of init channels')
+parser.add_argument('--layers', type=int, default=20, help='total number of layers')
+parser.add_argument('--save_model_path', type=str, default='saved_models', help='path to save the model')
+parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
+parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
+parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
+parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
+parser.add_argument('--drop_path_prob', type=float, default=0.2, help='drop path probability')
+parser.add_argument('--arch', type=str, default='DARTS', help='which architecture to use')
+parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
+parser.add_argument('--lr_exp_decay', action='store_true', default=False, help='use exponential_decay learning_rate')
 parser.add_argument('--mix_alpha', type=float, default=0.5, help='mixup alpha')
-parser.add_argument(
-    '--lrc_loss_lambda', default=0, type=float, help='lrc_loss_lambda')
-parser.add_argument(
-    '--loss_type',
-    default=1,
-    type=float,
-    help='loss_type 0: cross entropy 1: multi margin loss 2: max margin loss')
+parser.add_argument('--lrc_loss_lambda', default=0, type=float, help='lrc_loss_lambda')
+# yapf: enable
 
 args = parser.parse_args()
 
@@ -130,11 +94,10 @@ def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
                                          args.auxiliary, args.auxiliary_weight,
                                          args.lrc_loss_lambda)
                 optimizer = fluid.optimizer.Momentum(
-                        learning_rate=cosine_decay(args.learning_rate, \
-                            args.epochs, steps_one_epoch),
-                        regularization=fluid.regularizer.L2Decay(\
-                            args.weight_decay),
-                        momentum=args.momentum)
+                    learning_rate=cosine_decay(args.learning_rate, args.epochs,
+                                               steps_one_epoch),
+                    regularization=fluid.regularizer.L2Decay(args.weight_decay),
+                    momentum=args.momentum)
                 optimizer.minimize(loss)
                 out = [py_reader, loss]
         else:
@@ -146,25 +109,32 @@ def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
 
 
 def train(model, args, im_shape, steps_one_epoch):
-    train_startup_prog = fluid.Program()
-    test_startup_prog = fluid.Program()
+    startup_prog = fluid.Program()
     train_prog = fluid.Program()
     test_prog = fluid.Program()
 
-    train_py_reader, loss_train = build_program(train_prog, train_startup_prog,
-                                                args, True, model, im_shape,
-                                                steps_one_epoch)
+    train_py_reader, loss_train = build_program(
+        train_prog, startup_prog, args, True, model, im_shape, steps_one_epoch)
 
     test_py_reader, prob, acc_1, acc_5 = build_program(
-        test_prog, test_startup_prog, args, False, model, im_shape,
-        steps_one_epoch)
+        test_prog, startup_prog, args, False, model, im_shape, steps_one_epoch)
 
     test_prog = test_prog.clone(for_test=True)
 
     place = fluid.CUDAPlace(0)
     exe = fluid.Executor(place)
-    exe.run(train_startup_prog)
-    exe.run(test_startup_prog)
+    exe.run(startup_prog)
+
+    if args.pretrained_model:
+
+        def if_exist(var):
+            return os.path.exists(os.path.join(args.pretrained_model, var.name))
+
+        fluid.io.load_vars(
+            exe,
+            args.pretrained_model,
+            main_program=train_prog,
+            predicate=if_exist)
 
     #if args.pretrained_model:
 
@@ -175,21 +145,24 @@ def train(model, args, im_shape, steps_one_epoch):
 
     exec_strategy = fluid.ExecutionStrategy()
     exec_strategy.num_threads = 1
-    train_exe = fluid.ParallelExecutor(
-        main_program=train_prog,
-        use_cuda=True,
-        loss_name=loss_train.name,
-        exec_strategy=exec_strategy)
-    
+    build_strategy = fluid.BuildStrategy()
+    build_strategy.memory_optimize = False
+    build_strategy.enable_inplace = True
+
+    compile_program = fluid.compiler.CompiledProgram(
+        train_prog).with_data_parallel(
+            loss_name=loss_train.name,
+            build_strategy=build_strategy,
+            exec_strategy=exec_strategy)
 
     train_reader = reader.train10(args)
     test_reader = reader.test10(args)
     train_py_reader.decorate_paddle_reader(train_reader)
     test_py_reader.decorate_paddle_reader(test_reader)
 
-    fluid.clip.set_gradient_clip(fluid.clip.GradientClipByGlobalNorm(args.grad_clip), program=train_prog)
+    fluid.clip.set_gradient_clip(
+        fluid.clip.GradientClipByGlobalNorm(args.grad_clip), program=train_prog)
     train_fetch_list = [loss_train]
-    fluid.memory_optimize(train_prog, skip_opt_set=set(train_fetch_list))
 
     def save_model(postfix, main_prog):
         model_path = os.path.join(args.save_model_path, postfix)
@@ -199,8 +172,6 @@ def train(model, args, im_shape, steps_one_epoch):
 
     def test(epoch_id):
         test_fetch_list = [prob, acc_1, acc_5]
-        #objs = utils.AvgrageMeter()
-        #prob = []
         top1 = utils.AvgrageMeter()
         top5 = utils.AvgrageMeter()
         test_py_reader.start()
@@ -210,8 +181,8 @@ def train(model, args, im_shape, steps_one_epoch):
             while True:
                 prev_test_start_time = test_start_time
                 test_start_time = time.time()
-                prob_v, acc_1_v, acc_5_v = exe.run(
-                    test_prog, fetch_list=test_fetch_list)
+                prob_v, acc_1_v, acc_5_v = exe.run(test_prog,
+                                                   fetch_list=test_fetch_list)
                 top1.update(np.array(acc_1_v), np.array(prob_v).shape[0])
                 top5.update(np.array(acc_5_v), np.array(prob_v).shape[0])
                 if step_id % args.report_freq == 0:
@@ -242,7 +213,8 @@ def train(model, args, im_shape, steps_one_epoch):
             while True:
                 prev_start_time = start_time
                 start_time = time.time()
-                loss_v, = train_exe.run(
+                loss_v, = exe.run(
+                    compile_program,
                     fetch_list=[v.name for v in train_fetch_list])
                 print("Epoch {}, Step {}, loss {}, time {}".format(epoch_id, step_id, \
                         np.array(loss_v).mean(), start_time-prev_start_time))
@@ -250,8 +222,10 @@ def train(model, args, im_shape, steps_one_epoch):
                 sys.stdout.flush()
         except fluid.core.EOFException:
             train_py_reader.reset()
-        if epoch_id % 50 == 0 or epoch_id == args.epochs - 1:
+        if epoch_id % 50 == 0:
             save_model(str(epoch_id), train_prog)
+        if epoch_id == args.epochs - 1:
+            save_model('final', train_prog)
         test(epoch_id)
 
 
