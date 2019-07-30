@@ -70,6 +70,7 @@ dataset_train_size = 50000.
 image_size = 32
 genotypes.DARTS = genotypes.MY_DARTS_list[args.model_id]
 
+
 def main():
     image_shape = [3, image_size, image_size]
     devices = os.getenv("CUDA_VISIBLE_DEVICES") or ""
@@ -79,7 +80,8 @@ def main():
     model = Network(args.init_channels, CIFAR_CLASSES, args.layers,
                     args.auxiliary, genotype)
     
-    steps_one_epoch = math.ceil(dataset_train_size / (devices_num * args.batch_size))
+    steps_one_epoch = math.ceil(dataset_train_size / 
+                                (devices_num * args.batch_size))
     train(model, args, image_shape, steps_one_epoch)
 
 
@@ -135,13 +137,6 @@ def train(model, args, im_shape, steps_one_epoch):
             args.pretrained_model,
             main_program=train_prog,
             predicate=if_exist)
-
-    #if args.pretrained_model:
-
-    #    def if_exist(var):
-    #        return os.path.exists(os.path.join(args.pretrained_model, var.name))
-
-    #    fluid.io.load_vars(exe, args.pretrained_model, main_program=train_prog, predicate=if_exist)
 
     exec_strategy = fluid.ExecutionStrategy()
     exec_strategy.num_threads = 1

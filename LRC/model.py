@@ -175,7 +175,6 @@ def StemConv(input, C_out, kernel_size, padding):
     return bn_a
 
 
-
 class NetworkCIFAR(object):
     def __init__(self, C, class_num, layers, auxiliary, genotype):
         self._layers = layers

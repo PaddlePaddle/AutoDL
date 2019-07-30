@@ -76,4 +76,3 @@ def cosine_with_warmup_decay(learning_rate, lr_min, steps_one_epoch,
             fluid.layers.assign(cosine_lr, lr)
 
     return lr
-
