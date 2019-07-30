@@ -67,11 +67,6 @@ parser.add_argument(
     default='save_models',
     help='path to save the model')
 parser.add_argument(
-    '--auxiliary',
-    action='store_true',
-    default=False,
-    help='use auxiliary tower')
-parser.add_argument(
     '--auxiliary_weight',
     type=float,
     default=0.4,
@@ -94,7 +89,7 @@ args = parser.parse_args()
 
 ImageNet_CLASSES = 1000
 dataset_train_size = 1281167
-image_size = 224
+image_size = 320
 genotypes.DARTS = genotypes.MY_DARTS_list[args.model_id]
 
 def main():
@@ -104,7 +99,7 @@ def main():
     logging.info("args = %s", args)
     genotype = eval("genotypes.%s" % args.arch)
     model = Network(args.init_channels, ImageNet_CLASSES, args.layers,
-                    args.auxiliary, genotype)
+                    genotype)
     
     steps_one_epoch = math.ceil(dataset_train_size / (devices_num * args.batch_size))
     train(model, args, image_shape, steps_one_epoch, devices_num)
@@ -117,8 +112,8 @@ def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
         py_reader = model.build_input(im_shape, is_train)
         if is_train:
             with fluid.unique_name.guard():
-                loss = model.train_model(py_reader, args.init_channels,
-                                         args.auxiliary, args.auxiliary_weight)
+                loss = model.train_model(py_reader, 
+                                         args.auxiliary_weight)
                 optimizer = fluid.optimizer.Momentum(
                         learning_rate=cosine_with_warmup_decay(\
                             args.learning_rate, args.lr_min, steps_one_epoch,\
@@ -130,8 +125,7 @@ def build_program(main_prog, startup_prog, args, is_train, model, im_shape,
                 out = [py_reader, loss]
         else:
             with fluid.unique_name.guard():
-                prob, acc_1, acc_5 = model.test_model(py_reader,
-                                                      args.init_channels)
+                prob, acc_1, acc_5 = model.test_model(py_reader)
                 out = [py_reader, prob, acc_1, acc_5]
     return out
 
@@ -163,19 +157,20 @@ def train(model, args, im_shape, steps_one_epoch, num_gpu):
     #        return os.path.exists(os.path.join(args.pretrained_model, var.name))
 
     #    fluid.io.load_vars(exe, args.pretrained_model, main_program=train_prog, predicate=if_exist)
-    #build_strategy = fluid.BuildStrategy()
-    #build_strategy.enable_inplace = False
-    #build_strategy.memory_optimize = False
+    build_strategy = fluid.BuildStrategy()
+    build_strategy.enable_inplace = True
+    build_strategy.memory_optimize = False
     train_fetch_list = [loss_train]
   
-    fluid.memory_optimize(train_prog, skip_opt_set=set(train_fetch_list))
+    #fluid.memory_optimize(train_prog, skip_opt_set=set(train_fetch_list))
     exec_strategy = fluid.ExecutionStrategy()
-    #exec_strategy.num_threads = 1
+    exec_strategy.num_threads = 1
     train_exe = fluid.ParallelExecutor(
          main_program=train_prog,
          use_cuda=True,
          loss_name=loss_train.name,
-         exec_strategy=exec_strategy)
+         exec_strategy=exec_strategy,
+         build_strategy=build_strategy)
     
     train_batch_size = args.batch_size
     test_batch_size = 256
@@ -187,7 +182,7 @@ def train(model, args, im_shape, steps_one_epoch, num_gpu):
     test_py_reader.decorate_paddle_reader(test_reader)
 
     fluid.clip.set_gradient_clip(fluid.clip.GradientClipByGlobalNorm(args.grad_clip), program=train_prog)
-    print(train_prog.to_string(True))
+    #print(train_prog.to_string(True))
 
     def save_model(postfix, main_prog):
         model_path = os.path.join(args.save_model_path, postfix)
@@ -246,7 +241,7 @@ def train(model, args, im_shape, steps_one_epoch, num_gpu):
                         np.array(loss_v).mean(), start_time-prev_start_time))
                 step_id += 1
                 sys.stdout.flush()
-                os._exit(1)
+                #os._exit(1)
         except fluid.core.EOFException:
             train_py_reader.reset()
         if epoch_id % 50 == 0 or epoch_id == args.epochs - 1:
