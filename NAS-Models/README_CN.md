@@ -1,36 +1,34 @@
-# Image Classification based on NAS-Searched Models
+# 基于神经网络搜索的图片分类
 
-This directory contains 10 image classification models.
-Nine of them are automatically searched models using different Neural Architecture Search (NAS) algorithms, and the other is the residual network.
-We provide codes and scripts to train these models on both CIFAR-10 and CIFAR-100.
-We use the standard data augmentation, i.e., random crop, random flip, and normalization.
+该项目包含了10种图片分类模型。其中的九种模型是由不同的神经网络搜索(NAS)算法自动搜索出来的，另外一种是ResNet模型。
+我们提供了代码和训练脚本来在CIFAR-10和CIFAR-100数据集上训练和测试这些模型。
+在训练过程中，我们使用了标准的数据增强技术，即随机裁剪，随机翻转，和归一化。
 
 ---
-## Table of Contents
-- [Installation](#installation)
-- [Data Preparation](#data-preparation)
-- [Training Models](#training-models)
-- [Project Structure](#project-structure)
-- [Citation](#citation)
+## 内容概括
+- [安装说明](#安装说明)
+- [数据准备](#数据准备)
+- [训练模型](#训练模型)
+- [项目文件结构介绍](#项目文件结构)
+- [引用](#引用)
 
 
-### Installation
-This project has the following requirements:
+### 安装说明
+这个项目依赖于以下一些软件包：
 - Python = 3.6
 - PadddlePaddle Fluid >= v0.15.0
 - numpy, tarfile, cPickle, PIL
 
 
-### Data Preparation
-Please download [CIFAR-10](https://dataset.bj.bcebos.com/cifar/cifar-10-python.tar.gz) and [CIFAR-100](https://dataset.bj.bcebos.com/cifar/cifar-100-python.tar.gz) before running the codes.
-Note that the MD5 of CIFAR-10-Python compressed file is `c58f30108f718f92721af3b95e74349a` and the MD5 of CIFAR-100-Python compressed file is `eb9058c3a382ffc7106e4002c42a8d85`.
-Please save the file into `${TORCH_HOME}/cifar.python`.
-After data preparation, there should be two files `${TORCH_HOME}/cifar.python/cifar-10-python.tar.gz` and `${TORCH_HOME}/cifar.python/cifar-100-python.tar.gz`.
+### 数据准备
+请在运行代码前下载 [CIFAR-10](https://dataset.bj.bcebos.com/cifar/cifar-10-python.tar.gz) 和 [CIFAR-100](https://dataset.bj.bcebos.com/cifar/cifar-100-python.tar.gz)。
+请注意CIFAR-10-Python压缩文件的MD5值是`c58f30108f718f92721af3b95e74349a`，CIFAR-100-Python压缩文件的MD5值是`eb9058c3a382ffc7106e4002c42a8d85`。
+请将这两个下载文件保存在`${TORCH_HOME}/cifar.python`路径下。在数据准备之后，应该有两个文件：`${TORCH_HOME}/cifar.python/cifar-10-python.tar.gz`和`${TORCH_HOME}/cifar.python/cifar-100-python.tar.gz`。
 
 
 ### Training Models
 
-After setting up the environment and preparing the data, you can train the model. The main function entrance is `train_cifar.py`. We also provide some scripts for easy usage.
+在设置好环境和准备好数据之后，您可以开始训练模型了。训练的主要入口文件是在`train_cifar.py`中，我们提供了方便的脚本可以直接训练，如下：
 ```
 bash ./scripts/base-train.sh 0 cifar-10 ResNet110
 bash ./scripts/train-nas.sh  0 cifar-10 GDAS_V1
@@ -42,32 +40,32 @@ bash ./scripts/train-nas.sh  0 cifar-10 AmoebaNet
 bash ./scripts/train-nas.sh  0 cifar-10 PNASNet
 bash ./scripts/train-nas.sh  0 cifar-100 SETN
 ```
-The first argument is the GPU-ID to train your program, the second argument is the dataset name (`cifar-10` or `cifar-100`), and the last one is the model name.
-Please use `./scripts/base-train.sh` for ResNet and use `./scripts/train-nas.sh` for NAS-searched models.
+第一个参数指定在哪块GPU上运行该的程序(GPU-ID)，第二个参数指定数据集名称(`cifar-10`或`cifar-100`)，第三个参数是指定了模型名称。
+如果您要训练ResNet模型，请使用`./scripts/base-train.sh`；如果您要训练NAS搜索出的模型，请使用`./scripts/train-nas.sh`。
 
 
-### Project Structure
+### 项目文件结构
 ```
 .
-├──train_cifar.py [Training CNN models]
-├──lib [Library for dataset, models, and others]
+├──train_cifar.py [训练卷积神经网络模型的文件]
+├──lib [数据集，模型，及其他相关库]
 │  └──models  
-│     ├──__init__.py [Import useful Classes and Functions in models]  
-│     ├──resnet.py [Define the ResNet models]
-│     ├──operations.py [Define the atomic operation in NAS search space]
-│     ├──genotypes.py [Define the topological structure of different NAS-searched models]
-│     └──nas_net.py [Define the macro structure of NAS models]
+│     ├──__init__.py [引用一些模型相关的函数和类]
+│     ├──resnet.py [定义ResNet模型]
+│     ├──operations.py [定义了NAS搜索空间中的一些原子级操作]
+│     ├──genotypes.py [定义了不同的NAS搜索出的模型的拓扑结构]
+│     └──nas_net.py [定义了NAS模型的宏观结构]
 │  └──utils
-│     ├──__init__.py [Import useful Classes and Functions in utils]  
-│     ├──meter.py [Define the AverageMeter class to count the accuracy and loss]
-│     ├──time_utils.py [Define some functions to print date or convert seconds into hours]
-│     └──data_utils.py [Define data augmentation functions and dataset reader for CIFAR]
-└──scripts [Scripts for running]  
+│     ├──__init__.py [引用一些辅助模块]
+│     ├──meter.py [定义了AverageMeter类来统计模型的准确率和损失函数值]
+│     ├──time_utils.py [定义了打印时间和转换时间度量的函数]
+│     └──data_utils.py [定义了数据集相关的读取和数据增强相关的函数]
+└──scripts [运行脚本]
 ```
 
 
-### Citation
-If you find that this project helps your research, please consider citing these papers:
+### 引用
+如果您发现这个项目对您的研究有帮助，请考虑引用下面的某些论文：
 ```
 @inproceedings{dong2019one,
   title     = {One-Shot Neural Architecture Search via Self-Evaluated Template Network},
