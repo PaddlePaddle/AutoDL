@@ -69,7 +69,6 @@ def cosine_decay_with_warmup(learning_rate, step_each_epoch, epochs=120):
   decrease lr for every mini-batch and start with warmup.
   """
     from paddle.fluid.layers.learning_rate_scheduler import _decay_step_counter
-    from paddle.fluid.initializer import init_on_cpu
     global_step = _decay_step_counter()
     lr = fluid.layers.tensor.create_global_var(
         shape=[1],
@@ -81,17 +80,16 @@ def cosine_decay_with_warmup(learning_rate, step_each_epoch, epochs=120):
     warmup_epoch = fluid.layers.fill_constant(
         shape=[1], dtype='float32', value=float(5), force_cpu=True)
 
-    with init_on_cpu():
-        epoch = ops.floor(global_step / step_each_epoch)
-        with fluid.layers.control_flow.Switch() as switch:
-            with switch.case(epoch < warmup_epoch):
-                decayed_lr = learning_rate * (global_step /
-                                              (step_each_epoch * warmup_epoch))
-                fluid.layers.tensor.assign(input=decayed_lr, output=lr)
-            with switch.default():
-                decayed_lr = learning_rate * \
-                  (ops.cos((global_step - warmup_epoch * step_each_epoch) * (math.pi / (epochs * step_each_epoch))) + 1)/2
-                fluid.layers.tensor.assign(input=decayed_lr, output=lr)
+    epoch = ops.floor(global_step / step_each_epoch)
+    with fluid.layers.control_flow.Switch() as switch:
+        with switch.case(epoch < warmup_epoch):
+            decayed_lr = learning_rate * (global_step /
+                                          (step_each_epoch * warmup_epoch))
+            fluid.layers.tensor.assign(input=decayed_lr, output=lr)
+        with switch.default():
+            decayed_lr = learning_rate * \
+              (ops.cos((global_step - warmup_epoch * step_each_epoch) * (math.pi / (epochs * step_each_epoch))) + 1)/2
+            fluid.layers.tensor.assign(input=decayed_lr, output=lr)
     return lr
 
 

@@ -27,7 +27,6 @@ import paddle.fluid.layers.ops as ops
 import paddle.fluid as fluid
 from paddle.fluid.layers.learning_rate_scheduler import _decay_step_counter
 import math
-from paddle.fluid.initializer import init_on_cpu
 from models import inception
 from absl import flags
 
@@ -66,8 +65,7 @@ class CIFARModel(object):
                 Applies cosine decay to the learning rate.
             """
             global_step = _decay_step_counter()
-            with init_on_cpu():
-                frac = (1 + ops.cos(global_step / max_step * math.pi)) / 2
+            frac = (1 + ops.cos(global_step / max_step * math.pi)) / 2
             return FLAGS.lr_min + (FLAGS.lr_max - FLAGS.lr_min) * frac
 
         self.lr_strategy = cosine_decay
