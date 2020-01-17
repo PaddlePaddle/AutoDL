@@ -93,7 +93,8 @@ class Cell():
                         dropout_implementation='upscale_in_train')
             s = h3 + h4
             out += [s]
-        return fluid.layers.concat([out[i] for i in self._concat], axis=1)
+        concat_ = fluid.layers.concat([out[i] for i in self._concat], axis=1, name=name+'concat')
+        return concat_
 
 
 def AuxiliaryHeadCIFAR(input, num_classes, aux_name='auxiliary_head'):
@@ -243,7 +244,7 @@ class NetworkCIFAR(object):
                                           initializer=Normal(scale=1e-3),
                                           name='classifier.weight'),
                                       bias_attr=ParamAttr(
-                                          initializer=Constant(0, ),
+                                          initializer=Constant(0),
                                           name='classifier.bias'))
         return self.logits, self.logits_aux
 
@@ -371,7 +372,7 @@ def Stem0Conv(input, C_out):
             initializer=Xavier(
                 uniform=False, fan_in=0), name='stem0.0.weight'),
         bias_attr=False)
-    bn_a = fluid.layers.batch_norm(
+    relu_a = fluid.layers.batch_norm(
         conv_a,
         param_attr=ParamAttr(
             initializer=Constant(1.), name='stem0.1.weight'),
@@ -480,7 +481,7 @@ class NetworkImageNet(object):
             s0, s1 = s1, cell.forward(s0, s1, self.drop_path_prob, is_train,
                                       name)
             if i == int(2 * self._layers // 3):
-                if self._auxiliary and self.training:
+                if self.training:
                     self.logits_aux = AuxiliaryHeadImageNet(s1, self.class_num)
         out = fluid.layers.pool2d(s1, 7, "avg", pool_stride=7)
         self.logits = fluid.layers.fc(out,
@@ -489,7 +490,7 @@ class NetworkImageNet(object):
                                           initializer=Normal(scale=1e-3),
                                           name='classifier.weight'),
                                       bias_attr=ParamAttr(
-                                          initializer=Constant(0, ),
+                                          initializer=Constant(0),
                                           name='classifier.bias'))
         return self.logits, self.logits_aux
 
